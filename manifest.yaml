@@ -106,13 +106,13 @@ metadata:
 spec:
   tls:
   - hosts:
-    - alice.my-org.internal
+    - alice.${DOMAIN_NAME}
     secretName: alice-my-org-internal-key
   - hosts:
-    - bob.my-org.internal
+    - bob.${DOMAIN_NAME}
     secretName: bob-my-org-internal-key
   rules:
-  - host: alice.my-org.internal
+  - host: alice.${DOMAIN_NAME}
     http:
       paths:
       - path: /
@@ -122,7 +122,7 @@ spec:
             name: alice-svc
             port:
               number: 80
-  - host: bob.my-org.internal
+  - host: bob.${DOMAIN_NAME}
     http:
       paths:
       - path: /
