@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: anchor-hmac-key
+type: Opaque
+stringData:
+  acme-hmac-key: ${ACME_HMAC_KEY}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: anchor-my-org-internal
+spec:
+  acme:
+    server: ${ACME_DIRECTORY_URL}
+    privateKeySecretRef:
+      name: anchor-my-org-internal
+    externalAccountBinding:
+      keyID: ${ACME_KID}
+      keySecretRef:
+        name: anchor-hmac-key
+        key: acme-hmac-key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alice-app
+  template:
+    metadata:
+      name: alice-pod
+      labels:
+        app: alice-app
+    spec:
+      containers:
+      - name: alice-container
+        image: hashicorp/http-echo
+        args: ['-listen=:8080', '-text="hello from alice!"']
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alice-svc
+  labels:
+    app: alice-app
+spec:
+  selector:
+    app: alice-app
+  type: NodePort
+  ports:
+  - nodePort: 30801
+    port: 80
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bob
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bob-app
+  template:
+    metadata:
+      name: bob-pod
+      labels:
+        app: bob-app
+    spec:
+      containers:
+      - name: bob-container
+        image: hashicorp/http-echo
+        args: ['-listen=:8080', '-text="hello from bob!"']
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bob-svc
+  labels:
+    app: bob-app
+spec:
+  selector:
+    app: bob-app
+  type: NodePort
+  ports:
+  - nodePort: 30802
+    port: 80
+    targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway-ing
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/issuer: "anchor-my-org-internal"
+spec:
+  tls:
+  - hosts:
+    - alice.my-org.internal
+    secretName: alice-my-org-internal-key
+  - hosts:
+    - bob.my-org.internal
+    secretName: bob-my-org-internal-key
+  rules:
+  - host: alice.my-org.internal
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: alice-svc
+            port:
+              number: 80
+  - host: bob.my-org.internal
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: bob-svc
+            port:
+              number: 80
